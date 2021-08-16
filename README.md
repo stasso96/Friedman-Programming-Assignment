@@ -1,1 +1,1 @@
-Created as part of the Friedman LLP Interview process for the role of Software Developer
+Created as part of the Friedman LLP interview process for the role of Software Developer
