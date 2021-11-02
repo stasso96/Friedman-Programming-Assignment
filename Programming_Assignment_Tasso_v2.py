@@ -22,14 +22,17 @@ class Binance :
         headers = {
         'X-MBX-APIKEY': API_KEY
         }
+
         params['symbol'] = self.symbol
         params['startTime'] = start_time 
         
 
         while(True) :
             r = requests.get('https://api.binance.us/api/v3/klines', params=params, headers=headers)
+
             if r.status_code != 200:
-                return 1
+                return (1, r.status_code)
+
             j += r.json()
 
             params["startTime"] = j[-1][0]
@@ -40,23 +43,28 @@ class Binance :
             j.pop()
         
         return j
-
     #-------------------------------------------------------------------------------------------------------------
     #creates a csv file and Write the candlestick data to the file
     def create_csv(self) :
+        today = dt.date.today()
+
         print(f"creating {self.filename}...")
-        data = self.get_data(self.get_first_of_month_timestamp())
+
+        if today.day == 1 :
+            data = self.get_data(self.get_last_month_timestamps()) 
         
-        if(data == 1) :
-            print("ERROR: Unable to fetch data!")
-            return
+        else :
+            data = self.get_data(self.get_first_of_month_timestamp())
+        
+        if(data[0] == 1) :
+            print(f"ERROR: Unable to fetch data! API returned {data[1]}")
+            return 
 
         with open(self.filename, "w", newline='') as f:
             writer = csv.writer(f)
             writer.writerows(data)
 
         print(f"Done.")
-
     #-------------------------------------------------------------------------------------------------------------
     #checks to see if the .csv file has the most recent data, if it does not, appends the new data to the .csv.
     def append_to_csv(self) :
@@ -82,7 +90,6 @@ class Binance :
         writer = csv.writer(file)
         writer.writerows(data)
         print(f"Done.")  
-
     #-------------------------------------------------------------------------------------------------------------
     #generates a milisecond timestamp for midnight on the first day of the current month
     def get_first_of_month_timestamp(self):
@@ -95,7 +102,6 @@ class Binance :
             return first_of_month_ts[:13]
         
         return first_of_month_ts
-
     #-------------------------------------------------------------------------------------------------------------
     #generates a milisecond timestamp for 11:45:00 last night
     def get_15_before_midnight(self):
@@ -109,7 +115,6 @@ class Binance :
             return fifteen_before[:13]
         
         return fifteen_before
-
     #-------------------------------------------------------------------------------------------------------------
     #generates a milisecond timestamp for 11:59:59 last night
     def get_yesterday_timestamp(self):
@@ -122,6 +127,16 @@ class Binance :
             return yesterday_ts[:13]
         
         return yesterday_ts
+    #-------------------------------------------------------------------------------------------------------------
+    #generates a milisecond timestamp the 00:00:00 on the first day of the previous month
+    def get_last_month_timestamps(self) :
+            today = dt.date.today()
+            last_month_ld_d = today - dt.timedelta(days=1)
+            last_month_fd_d = last_month_ld_d.replace(day=1)
+            last_month_fd_dt = dt.datetime.combine(last_month_fd_d, dt.time())
+            last_month_fd_ts = str(last_month_fd_dt.timestamp() * 1000)[:13]
+
+            return last_month_fd_ts
 
 class Bitcoin(Binance):
     SYMBOL = 'BTCUSDT'
@@ -156,4 +171,3 @@ if Path(eth_filename).is_file():
 else:
     print ("Etherium File does not exist.")
     ethereum.create_csv()
-
