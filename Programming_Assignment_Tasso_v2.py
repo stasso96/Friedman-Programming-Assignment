@@ -4,6 +4,9 @@ import csv
 from pathlib import Path
 
 class Binance :
+    LABELS = ["Open time", 'Open', 'High', 'Low', 'Close', 'Volume', "Close time", "Quote asset volume",
+        "Number of trades", "Taker buy base asset volume", "Taker buy quote asset volume", 'Ignore'] 
+
     def __init__(self, filename, symbol):
         self.filename = filename
         self.symbol = symbol
@@ -22,16 +25,14 @@ class Binance :
         headers = {
         'X-MBX-APIKEY': API_KEY
         }
-
         params['symbol'] = self.symbol
         params['startTime'] = start_time 
         
-
         while(True) :
             r = requests.get('https://api.binance.us/api/v3/klines', params=params, headers=headers)
 
             if r.status_code != 200:
-                return (1, r.status_code)
+                raise Binance_Exception(status_code=r.status_code, data=r.json())
 
             j += r.json()
 
@@ -39,13 +40,14 @@ class Binance :
             
             if(str(j[-1][0]) == self.get_15_before_midnight()) :
                 break
-            
+            print('hello')
             j.pop()
         
         return j
     #-------------------------------------------------------------------------------------------------------------
     #creates a csv file and Write the candlestick data to the file
     def create_csv(self) :
+            
         today = dt.date.today()
 
         print(f"creating {self.filename}...")
@@ -55,14 +57,11 @@ class Binance :
         
         else :
             data = self.get_data(self.get_first_of_month_timestamp())
-        
-        if(data[0] == 1) :
-            print(f"ERROR: Unable to fetch data! API returned {data[1]}")
-            return 
 
-        with open(self.filename, "w", newline='') as f:
-            writer = csv.writer(f)
-            writer.writerows(data)
+        file = open(self.filename, "w", newline='')
+        writer = csv.writer(file)
+        writer.writerow(self.LABELS)
+        writer.writerows(data)
 
         print(f"Done.")
     #-------------------------------------------------------------------------------------------------------------
@@ -71,21 +70,34 @@ class Binance :
         print(f"adding new data to {self.filename}...")
         file = open(self.filename, "r")
         input = file.readlines()
+
+        if not input :
+            file = open(self.filename, "a", newline='')
+            writer = csv.writer(file)
+            writer.writerow(self.LABELS)
+            file.close()
+            file = open(self.filename, "r")
+            input = file.readlines()
+
         last_date_csv = input[-1].partition(',')[0]
-        last_date_obj = dt.datetime.fromtimestamp(float(last_date_csv) / 1000) 
+        num = True    
+
+        if not last_date_csv.isnumeric() :
+            last_date_csv = self.get_first_of_month_timestamp()
+            num = False
+            
+        last_date_obj = dt.datetime.fromtimestamp(float(last_date_csv) / 1000)         
         yesterday_obj = dt.datetime.fromtimestamp(float(self.get_yesterday_timestamp()) / 1000)
 
-        if(last_date_obj.date() == yesterday_obj.date()) :
+        if last_date_obj.date() == yesterday_obj.date() and last_date_obj.time() == dt.time(23, 45, 0) :
             print(f"{self.filename} is already up to date\nDone.")
             return 
 
         data = self.get_data(last_date_csv)
 
-        if(data == 1) :
-            print("ERROR: Unable to fetch data!")
-            return
+        if num :
+            data.pop(0)
 
-        data.pop(0)
         file = open(self.filename, "a", newline='')
         writer = csv.writer(file)
         writer.writerows(data)
@@ -137,6 +149,21 @@ class Binance :
             last_month_fd_ts = str(last_month_fd_dt.timestamp() * 1000)[:13]
 
             return last_month_fd_ts
+
+#Class to handle errors from the Binance API
+class Binance_Exception(Exception) :
+    def __init__(self, status_code, data) :
+        self.status_code = status_code
+        self.data = data
+        if self.data:
+            self.code = data['code']
+            self.msg = data['msg']
+        else:
+            self.code = None
+            self.msg = None
+        message = f"\n-Response from server-\nstatus code: {status_code}\nBinance Error Code: {self.code} \nmessage: {self.msg}"
+
+        super().__init__(message)
 
 class Bitcoin(Binance):
     SYMBOL = 'BTCUSDT'
